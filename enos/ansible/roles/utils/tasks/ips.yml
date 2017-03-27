@@ -4,4 +4,3 @@
     src: ips.txt.j2
     dest: "{{ ips_file }}"
   delegate_to: localhost
-  run_once: true

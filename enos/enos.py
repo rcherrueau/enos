@@ -35,7 +35,7 @@ from utils.constants import (SYMLINK_NAME, TEMPLATE_DIR, ANSIBLE_DIR,
                              NETWORK_IFACE, EXTERNAL_IFACE, VERSION)
 from utils.extra import (run_ansible, generate_inventory,
                          bootstrap_kolla, to_abs_path, pop_ip,
-                         make_provider)
+                         make_provider, mk_kolla_values)
 
 from utils.network_constraints import (build_grp_constraints,
                                        build_ip_constraints)
@@ -376,12 +376,35 @@ def bench(env=None, **kwargs):
         return product
 
     logging.debug('phase[bench]: args=%s' % kwargs)
+
     workload_dir = kwargs["--workload"]
+
+    # Note: 100% HACK! Do not keep the following like that! Find a
+    # neet way to get values required by `os_env` and `workloads`.
+    required_kolla_values = {
+        'neutron_external_address':   pop_ip(env),
+        'network_interface':          env['eths'][NETWORK_IFACE],
+        'kolla_internal_vip_address': env['config']['vip'],
+        'neutron_external_interface': env['eths'][EXTERNAL_IFACE],
+        'influx_vip':                 env['config']['influx_vip'],
+        'kolla_ref':                  env['config']['kolla_ref'],
+        'resultdir':                  env['resultdir']
+    }
+    if 'enable_monitoring' in env['config']:
+        required_kolla_values['enable_monitoring'] = \
+                env['config']['enable_monitoring']
+    playbook_values = env['config'].copy()
+    playbook_values.update(mk_kolla_values(
+        os.path.join(env['resultdir'], 'kolla'),
+        env['config']['kolla'],
+        required_kolla_values))
+
     with open(os.path.join(workload_dir, "run.yml")) as workload_f:
         workload = yaml.load(workload_f)
         for bench_type, desc in workload.items():
             scenarios = desc.get("scenarios", [])
             for scenario in scenarios:
+                print(scenario)
                 # merging args
                 top_args = desc.get("args", {})
                 args = scenario.get("args", {})
@@ -398,15 +421,15 @@ def bench(env=None, **kwargs):
                             'multinode')
                     # NOTE(msimonin) all the scenarios must reside on
                     # the workload directory
-                    env['config']['bench'] = {
+                    playbook_values.update(bench={
                         'type': bench_type,
                         'location': os.path.abspath(
                                       os.path.join(workload_dir,
                                                    scenario["file"])),
                         'file': scenario["file"],
                         'args': a
-                    }
-                    run_ansible([playbook_path], inventory_path, env['config'])
+                    })
+                    run_ansible([playbook_path], inventory_path, playbook_values)
 
 
 @enostask("""

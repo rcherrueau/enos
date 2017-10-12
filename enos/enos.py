@@ -22,7 +22,6 @@ Commands:
   init           Initialise OpenStack with the bare necessities.
   bench          Run rally on this OpenStack.
   backup         Backup the environment
-  ssh-tunnel     Print configuration for port forwarding with horizon.
   tc             Enforce network constraints
   info           Show information of the actual deployment.
   destroy        Destroy the deployment and optionally the related resources.
@@ -42,15 +41,14 @@ from utils.extra import (run_ansible, generate_inventory,
                          seekpath)
 from utils.network_constraints import (build_grp_constraints,
                                        build_ip_constraints)
-from utils.enostask import (enostask, check_env)
+from utils.enostask import (enostask, enostasks, check_env)
 
-from datetime import datetime
 import logging
 
 from docopt import docopt
 import pprint
 
-import os
+from os import path, mkdir
 from subprocess import check_call
 
 import json
@@ -81,15 +79,9 @@ Options:
 
 """)
 def up(env=None, **kwargs):
-    logging.debug('phase[up]: args=%s' % kwargs)
-
-    # Generate or get the directory for results
-    env['resultdir'] = _set_resultdir(kwargs['--env'])
-    logging.info("Directory for experiment results is %s", env['resultdir'])
-
     # Loads the configuration file
-    config_file = os.path.abspath(kwargs['-f'])
-    if os.path.isfile(config_file):
+    config_file = path.abspath(kwargs['-f'])
+    if path.isfile(config_file):
         env['config_file'] = config_file
         with open(config_file, 'r') as f:
             env['config'].update(yaml.load(f))
@@ -119,10 +111,10 @@ def up(env=None, **kwargs):
     inventory_conf = env['config'].get('inventory')
     if not inventory_conf:
         logging.debug("No inventory specified, using the sample.")
-        base_inventory = os.path.join(INVENTORY_DIR, 'inventory.sample')
+        base_inventory = path.join(INVENTORY_DIR, 'inventory.sample')
     else:
         base_inventory = seekpath(inventory_conf)
-    inventory = os.path.join(env['resultdir'], 'multinode')
+    inventory = path.join(env['resultdir'], 'multinode')
     generate_inventory(env['rsc'], base_inventory, inventory)
     logging.info('Generates inventory %s' % inventory)
 
@@ -146,7 +138,7 @@ def up(env=None, **kwargs):
 
     # Runs playbook that initializes resources (eg,
     # installs the registry, install monitoring tools, ...)
-    up_playbook = os.path.join(ANSIBLE_DIR, 'up.yml')
+    up_playbook = path.join(ANSIBLE_DIR, 'up.yml')
     run_ansible([up_playbook], inventory, extra_vars=env['config'],
         tags=kwargs['--tags'])
 
@@ -168,12 +160,12 @@ Options:
   -vv                  Verbose mode.
 """ % SYMLINK_NAME)
 @check_env
-def install_os(env=None, **kwargs):
+def os(env=None, **kwargs):
     logging.debug('phase[os]: args=%s' % kwargs)
 
     # Clone or pull Kolla
-    kolla_path = os.path.join(env['resultdir'], 'kolla')
-    if os.path.isdir(kolla_path):
+    kolla_path = path.join(env['resultdir'], 'kolla')
+    if path.isdir(kolla_path):
         logging.info("Remove previous Kolla installation")
         check_call("rm -rf %s" % kolla_path, shell=True)
 
@@ -189,7 +181,7 @@ def install_os(env=None, **kwargs):
     bootstrap_kolla(env)
 
     # Construct kolla-ansible command...
-    kolla_cmd = [os.path.join(kolla_path, "tools", "kolla-ansible")]
+    kolla_cmd = [path.join(kolla_path, "tools", "kolla-ansible")]
 
     if kwargs['--reconfigure']:
         kolla_cmd.append('reconfigure')
@@ -225,11 +217,11 @@ Options:
   -vv                  Verbose mode.
 """ % SYMLINK_NAME)
 @check_env
-def init_os(env=None, **kwargs):
+def init(env=None, **kwargs):
     logging.debug('phase[init]: args=%s' % kwargs)
 
     cmd = []
-    cmd.append('. %s' % os.path.join(env['resultdir'], 'admin-openrc'))
+    cmd.append('. %s' % path.join(env['resultdir'], 'admin-openrc'))
     # add cirros image
     url = 'http://download.cirros-cloud.net/0.3.4/cirros-0.3.4-x86_64-disk.img'
     images = [{'name': 'cirros.uec',
@@ -359,7 +351,7 @@ def bench(env=None, **kwargs):
     logging.debug('phase[bench]: args=%s' % kwargs)
     playbook_values = mk_enos_values(env)
     workload_dir = seekpath(kwargs["--workload"])
-    with open(os.path.join(workload_dir, "run.yml")) as workload_f:
+    with open(path.join(workload_dir, "run.yml")) as workload_f:
         workload = yaml.load(workload_f)
         for bench_type, desc in workload.items():
             scenarios = desc.get("scenarios", [])
@@ -374,12 +366,12 @@ def bench(env=None, **kwargs):
                 if not (top_enabled and enabled):
                     continue
                 for a in cartesian(top_args):
-                    playbook_path = os.path.join(ANSIBLE_DIR, 'run-bench.yml')
-                    inventory_path = os.path.join(
+                    playbook_path = path.join(ANSIBLE_DIR, 'run-bench.yml')
+                    inventory_path = path.join(
                         env['resultdir'], 'multinode')
                     # NOTE(msimonin) all the scenarios and plugins
                     # must reside on the workload directory
-                    scenario_location = os.path.join(
+                    scenario_location = path.join(
                         workload_dir, scenario["file"])
                     bench = {
                         'type': bench_type,
@@ -389,9 +381,9 @@ def bench(env=None, **kwargs):
                     }
 
                     if "plugin" in scenario:
-                        plugin = os.path.join(workload_dir,
+                        plugin = path.join(workload_dir,
                                            scenario["plugin"])
-                        if os.path.isdir(plugin):
+                        if path.isdir(plugin):
                             plugin = plugin + "/"
                         bench['plugin_location'] = plugin
                     playbook_values.update(bench=bench)
@@ -423,52 +415,15 @@ def backup(env=None, **kwargs):
         or kwargs['--env'] \
         or SYMLINK_NAME
 
-    backup_dir = os.path.abspath(backup_dir)
+    backup_dir = path.abspath(backup_dir)
     # create if necessary
-    if not os.path.isdir(backup_dir):
-        os.mkdir(backup_dir)
+    if not path.isdir(backup_dir):
+        mkdir(backup_dir)
     # update the env
     env['config']['backup_dir'] = backup_dir
-    playbook_path = os.path.join(ANSIBLE_DIR, 'backup.yml')
-    inventory_path = os.path.join(env['resultdir'], 'multinode')
+    playbook_path = path.join(ANSIBLE_DIR, 'backup.yml')
+    inventory_path = path.join(env['resultdir'], 'multinode')
     run_ansible([playbook_path], inventory_path, extra_vars=env['config'])
-
-
-@enostask("""
-usage: enos ssh-tunnel [-e ENV|--env=ENV] [-s|--silent|-vv]
-
-Options:
-  -e ENV --env=ENV     Path to the environment directory. You should
-                       use this option when you want to link a specific
-                       experiment [default: %s].
-  -h --help            Show this help message.
-  -s --silent          Quiet mode.
-  -vv                  Verbose mode.
-""" % SYMLINK_NAME)
-@check_env
-def ssh_tunnel(env=None, **kwargs):
-    user = env['user']
-    internal_vip_address = env['config']['vip']
-
-    logging.info("ssh tunnel informations:")
-    logging.info("___")
-
-    script = "cat > /tmp/openstack_ssh_config <<EOF\n"
-    script += "Host *.grid5000.fr\n"
-    script += "  User " + user + " \n"
-    script += "  ProxyCommand ssh -q " + user
-    script += "@194.254.60.4 nc -w1 %h %p # Access South\n"
-    script += "EOF\n"
-
-    port = 8080
-    script += "ssh -F /tmp/openstack_ssh_config -N -L " + \
-              str(port) + ":" + internal_vip_address + ":80 " + \
-              user + "@access.grid5000.fr &\n"
-
-    script += "echo 'http://localhost:8080'\n"
-
-    logging.info(script)
-    logging.info("___")
 
 
 @enostask("""
@@ -486,7 +441,7 @@ Options:
 def new(env=None, **kwargs):
     from utils.constants import TEMPLATE_DIR
     logging.debug('phase[new]: args=%s' % kwargs)
-    with open(os.path.join(TEMPLATE_DIR, 'reservation.yaml.sample'),
+    with open(path.join(TEMPLATE_DIR, 'reservation.yaml.sample'),
               mode='r') as content:
         print content.read()
 
@@ -517,7 +472,7 @@ def tc(env=None, **kwargs):
     test = kwargs['--test']
     if test:
         logging.info('Checking the constraints')
-        utils_playbook = os.path.join(ANSIBLE_DIR, 'utils.yml')
+        utils_playbook = path.join(ANSIBLE_DIR, 'utils.yml')
         # NOTE(msimonin): we retrieve eth name from the env instead
         # of env['config'] in case os hasn't been called
         options = {'action': 'test',
@@ -528,8 +483,8 @@ def tc(env=None, **kwargs):
 
     # 1. getting  ips/devices information
     logging.info('Getting the ips of all nodes')
-    utils_playbook = os.path.join(ANSIBLE_DIR, 'utils.yml')
-    ips_file = os.path.join(env['resultdir'], 'ips.txt')
+    utils_playbook = path.join(ANSIBLE_DIR, 'utils.yml')
+    ips_file = path.join(env['resultdir'], 'ips.txt')
     # NOTE(msimonin): we retrieve eth name from the env instead
     # of env['config'] in case os hasn't been called
     options = {'action': 'ips',
@@ -551,7 +506,7 @@ def tc(env=None, **kwargs):
                                                     ips,
                                                     constraints)
         # dumping it for debugging purpose
-        ips_with_constraints_file = os.path.join(env['resultdir'],
+        ips_with_constraints_file = path.join(env['resultdir'],
                                                  'ips_with_constraints.yml')
         with open(ips_with_constraints_file, 'w') as g:
             yaml.dump(ips_with_constraints, g)
@@ -560,7 +515,7 @@ def tc(env=None, **kwargs):
     logging.info('Enforcing the constraints')
     # enabling/disabling network constraints
     enable = network_constraints.setdefault('enable', True)
-    utils_playbook = os.path.join(ANSIBLE_DIR, 'utils.yml')
+    utils_playbook = path.join(ANSIBLE_DIR, 'utils.yml')
     options = {
         'action': 'tc',
         'ips_with_constraints': ips_with_constraints,
@@ -662,8 +617,8 @@ def deploy(**kwargs):
     if not kwargs['--env']:
         kwargs['--env'] = SYMLINK_NAME
 
-    install_os(**kwargs)
-    init_os(**kwargs)
+    os(**kwargs)
+    init(**kwargs)
 
 
 @enostask("""
@@ -684,60 +639,14 @@ Options:
 def kolla(env=None, **kwargs):
     logging.info('Kolla command')
     logging.info(kwargs)
-    kolla_path = os.path.join(env['resultdir'], 'kolla')
-    kolla_cmd = [os.path.join(kolla_path, "tools", "kolla-ansible")]
+    kolla_path = path.join(env['resultdir'], 'kolla')
+    kolla_cmd = [path.join(kolla_path, "tools", "kolla-ansible")]
     kolla_cmd.extend(kwargs['<command>'])
     kolla_cmd.extend(["-i", "%s/multinode" % env['resultdir'],
                       "--passwords", "%s/passwords.yml" % env['resultdir'],
                       "--configdir", "%s" % env['resultdir']])
     logging.info(kolla_cmd)
     check_call(kolla_cmd)
-
-
-def _set_resultdir(name=None):
-    """Set or get the directory to store experiment results.
-
-    Looks at the `name` and create the directory if it doesn't exist
-    or returns it in other cases. If the name is `None`, then the
-    function generates an unique name for the results directory.
-    Finally, it links the directory to `SYMLINK_NAME`.
-
-    :param name: file path to an existing directory. It could be
-    weather an absolute or a relative to the current working
-    directory.
-
-    Returns the file path of the results directory.
-
-    """
-    # Compute file path of results directory
-    resultdir_name = name or 'enos_' + datetime.today().isoformat()
-    resultdir_path = os.path.abspath(resultdir_name)
-
-    # Raise error if a related file exists
-    if os.path.isfile(resultdir_path):
-        raise EnosFilePathError(resultdir_path,
-                                "Result directory cannot be created due "
-                                "to existing file %s" % resultdir_path)
-
-    # Create the result directory if it does not exist
-    if not os.path.isdir(resultdir_path):
-        os.mkdir(resultdir_path)
-        logging.info('Generate results directory %s' % resultdir_path)
-
-    # Symlink the result directory with the 'cwd/current' directory
-    link_path = SYMLINK_NAME
-    if os.path.lexists(link_path):
-        os.remove(link_path)
-    try:
-        os.symlink(resultdir_path, link_path)
-        logging.info("Symlink %s to %s" % (resultdir_path, link_path))
-    except OSError:
-        # An harmless error can occur due to a race condition when
-        # multiple regions are simultaneously deployed
-        logging.warning("Symlink %s to %s failed" %
-                        (resultdir_path, link_path))
-
-    return resultdir_path
 
 
 def _configure_logging(args):
@@ -762,32 +671,8 @@ def main():
     _configure_logging(args)
     argv = [args['<command>']] + args['<args>']
 
-    if args['<command>'] == 'deploy':
-        deploy(**docopt(deploy.__doc__, argv=argv))
-    elif args['<command>'] == 'up':
-        up(**docopt(up.__doc__, argv=argv))
-    elif args['<command>'] == 'os':
-        install_os(**docopt(install_os.__doc__, argv=argv))
-    elif args['<command>'] == 'init':
-        init_os(**docopt(init_os.__doc__, argv=argv))
-    elif args['<command>'] == 'bench':
-        bench(**docopt(bench.__doc__, argv=argv))
-    elif args['<command>'] == 'backup':
-        backup(**docopt(backup.__doc__, argv=argv))
-    elif args['<command>'] == 'ssh-tunnel':
-        ssh_tunnel(**docopt(ssh_tunnel.__doc__, argv=argv))
-    elif args['<command>'] == 'tc':
-        tc(**docopt(tc.__doc__, argv=argv))
-    elif args['<command>'] == 'info':
-        info(**docopt(info.__doc__, argv=argv))
-    elif args['<command>'] == 'destroy':
-        destroy(**docopt(destroy.__doc__, argv=argv))
-    elif args['<command>'] == 'kolla':
-        kolla(**docopt(kolla.__doc__, argv=argv))
-    elif args['<command>'] == 'new':
-        new(**docopt(new.__doc__, argv=argv))
-    else:
-        pass
+    task = enostasks[args['<command>']]
+    task(**docopt(task.__doc__, argv=argv))
 
 
 if __name__ == '__main__':

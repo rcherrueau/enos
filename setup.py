@@ -30,7 +30,7 @@ setup(
     packages=find_packages(),
     install_requires=[
         'Jinja2==2.9',
-        'execo==2.6.1',
+        'execo',
         'ansible>=2.3.0,<2.4.0',
         'influxdb==4.0.0',
         'docopt>=0.6.2,<0.7.0',

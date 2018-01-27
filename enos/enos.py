@@ -104,15 +104,13 @@ def up(env=None, **kwargs):
     config = load_config(env['config'],
                          provider.topology_to_resources,
                          provider.default_config())
-    rsc, provider_net, eths = \
+    rsc, eths = \
         provider.init(config, kwargs['--force-deploy'])
 
     env['rsc'] = rsc
-    env['provider_net'] = provider_net
     env['eths'] = eths
 
     logging.debug("Provider ressources: %s", env['rsc'])
-    logging.debug("Provider network information: %s", env['provider_net'])
     logging.debug("Provider network interfaces: %s", env['eths'])
 
     # Generates inventory for ansible/kolla
@@ -133,15 +131,15 @@ def up(env=None, **kwargs):
 
     # Set variables required by playbooks of the application
     env['config'].update({
-       'vip':               pop_ip(env),
-       'registry_vip':      pop_ip(env),
-       'influx_vip':        pop_ip(env),
-       'grafana_vip':       pop_ip(env),
-       'network_interface': eths[NETWORK_IFACE],
+       'vip':               '192.168.0.249',
+       'registry_vip':      '192.168.0.248',
+       'influx_vip':        '192.168.0.247',
+       'grafana_vip':       '192.168.0.246',
+       'network_interface': 'veth0',
        'resultdir':         env['resultdir'],
        'rabbitmq_password': "demo",
        'database_password': "demo",
-       'external_vip':      pop_ip(env)
+       'external_vip':      '192.168.0.245'
     })
 
     # Runs playbook that initializes resources (eg,
@@ -286,20 +284,6 @@ def init_os(env=None, **kwargs):
                " --provider-network-type flat"
                " --external")
 
-    cmd.append("openstack subnet create public-subnet"
-               " --network public"
-               " --subnet-range %s"
-               " --no-dhcp"
-               " --allocation-pool start=%s,end=%s"
-               " --gateway %s"
-               " --dns-nameserver %s"
-               " --ip-version 4" % (
-                   env['provider_net']['cidr'],
-                   env['provider_net']['start'],
-                   env['provider_net']['end'],
-                   env['provider_net']['gateway'],
-                   env['provider_net']['dns']))
-
     cmd.append("openstack network create private"
                " --share"
                " --provider-network-type vxlan")
@@ -310,12 +294,12 @@ def init_os(env=None, **kwargs):
                " --network private"
                " --subnet-range 10.0.0.0/24"
                " --gateway 10.0.0.1"
-               " --dns-nameserver %s"
-               " --ip-version 4" % (env["provider_net"]['dns']))
+               " --dns-nameserver 84.200.69.80"
+               " --ip-version 4")
 
     # create a router between this two networks
     cmd.append('openstack router create router')
-    cmd.append('openstack router set router --external-gateway public')
+    # cmd.append('openstack router set router --external-gateway public')
     cmd.append('openstack router add subnet router private-subnet')
 
     cmd.append("sleep 10")
@@ -355,7 +339,7 @@ def init_os(env=None, **kwargs):
     # change the replied packet's destination IP (10.0.2.*) to the
     # original source IP (192.168.143.*). This process is called a
     # SNAT and we can implement it with `iptables`.
-    cmd.append('sudo iptables -t nat -A POSTROUTING -o enp0s3 -j MASQUERADE')
+    cmd.append('sudo iptables -t nat -A POSTROUTING -o ens3 -j MASQUERADE')
 
     cmd = '\n'.join(cmd)
 

@@ -232,10 +232,12 @@ def init_os(env=None, **kwargs):
     cmd = []
     cmd.append('. %s' % os.path.join(env['resultdir'], 'admin-openrc'))
 
-    # NOTE(tp-polytech): Install cirros and debian-9 images from
-    # /home/vagrant. Do not download them.
-    images = ['cirros', 'debian-9']
+    images = [ { 'name': 'cirros', 
+                 'url': 'http://download.cirros-cloud.net/0.3.5/cirros-0.3.5-x86_64-disk.img' },
+               { 'name': 'debian-9',
+                 'url': 'https://cdimage.debian.org/cdimage/openstack/current-9/debian-9-openstack-amd64.qcow2' } ]
     for image in images:
+	cmd.append("wget -q -o /tmp/%s.qcow2 %s" % (image['name'], image['url']))
         cmd.append("openstack image list "
                    "--property name=%(image_name)s -c Name -f value |fgrep %(image_name)s"
                    "|| openstack image create"
@@ -243,8 +245,8 @@ def init_os(env=None, **kwargs):
                    " --container-format=bare"
                    " --property architecture=x86_64"
                    " --public"
-                   " --file /home/vagrant/%(image_name)s.qcow2"
-                   " %(image_name)s" % {'image_name': image })
+                   " --file /tmp/%(image_name)s.qcow2"
+                   " %(image_name)s" % {'image_name': image['name'] })
 
     # flavors name, ram, disk, vcpus
     flavors = [('m1.tiny', 512, 1, 1),
@@ -763,6 +765,27 @@ def _set_resultdir(name=None):
                         (resultdir_path, link_path))
 
     return resultdir_path
+
+@enostask("""
+usage: enos expose [--list] [<vm> --psrc PSRC --pdest PDEST]
+                   [-e ENV|--env=ENV] [-s|--silent|-vv]
+
+Run kolla and install OpenStack.
+
+Options:
+  --list               List DNAT forwarding
+  -e ENV --env=ENV     Path to the environment directory. You should
+                       use this option when you want to link a specific
+                       experiment [default: %s].
+  -h --help            Show this help message.
+  --reconfigure        Reconfigure the services after a deployment.
+  -s --silent          Quiet mode.
+  -t TAGS --tags=TAGS  Only run ansible tasks tagged with these values.
+  -vv                  Verbose mode.
+""" % SYMLINK_NAME)
+@check_env
+def expose_vm(env=None, **kwargs):
+    pass
 
 
 def _configure_logging(args):

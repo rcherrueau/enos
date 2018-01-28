@@ -7,7 +7,7 @@ import logging
 import subprocess
 import sys
 
-class OVH(Provider):
+class Ovh(Provider):
     def init(self, config, force=False):
         def _make_hosts(resource):
             """Builds Host objects for `resource`.
@@ -29,19 +29,25 @@ class OVH(Provider):
         compute_ip = config['resources']['compute']
 
 
-        # TODO: Make a fake interface for public net on every host
+        # TODO: Make a fake interface for public net. See veth0 and veth1 as two interfaces linked
+        # 
+        # To delete theme: 
+        # sudo ip link delete veth0 type veth peer name veth1
         # reduce(list.__add__,
         #        map(lambda _, vs: _make_hosts(vs),
         #            config['resources'].items()))
-        cmd = 'ip link show veth0 || ip link add type veth peer'
+        cmd = 'ip link show veth0 || sudo ip link add veth0 type veth peer name veth1'
         for host in [ control_compute_ip, compute_ip ]:
-            ssh = subprocess.Popen(["ssh", "%s" % host.address, cmd],
+            ssh = subprocess.Popen(["ssh", "%s" % host, cmd],
                                    shell=False,
                                    stdout=subprocess.PIPE,
                                    stderr=subprocess.PIPE)
 
-            if ssh.stdout.readlines() == []:
+            res = ssh.stdout.readlines()
+            if not res:
                 logging.error(ssh.stderr.readlines())
+            else:
+                logging.info(res)
 
 
         # Fallback to static configuration
@@ -74,7 +80,7 @@ class OVH(Provider):
             ]
         }
 
-        eths = [ 'ens4', 'veth0' ]
+        eths = config['provider']['eths']
         roles = {r: _make_hosts(vs) for (r, vs) in config['resources'].items()}
 
         return (roles, eths)
@@ -86,8 +92,7 @@ class OVH(Provider):
 
     def default_config(self):
         return {
-            'eths':    None   # A pair that contains the name of
-                              # network and external interfaces
+            'eths': [ 'ens4', 'veth0' ]
         }
 
     def topology_to_resources(self, topology):

@@ -59,6 +59,7 @@ import yaml
 
 import itertools
 import operator
+import netifaces as net
 
 
 @enostask("""
@@ -285,26 +286,36 @@ def init_os(env=None, **kwargs):
     #            " --provider-network-type flat"
     #            " --external")
 
-    cmd.append("openstack network create private"
+    cmd.append("openstack network create public"
                " --share"
+               " --external"
                " --provider-physical-network physnet1"
                " --provider-network-type flat")
 
-    # NOTE(ty-polytech): The 192.168.0.0/18 collides with the
-    # 192.168.143.0/24 of public IP provided by Vagrant.
+    cmd.append("openstack subnet create public-subnet"
+               " --network public"
+               " --no-dhcp"
+               " --allocation-pool start=192.168.0.100,end=192.168.0.240"
+               " --gateway %s"
+               " --dns-nameserver 84.200.69.80"
+               " --ip-version 4" % net.ifaddresses('ens4')[net.AF_INET][0]['addr'])
+
+    cmd.append("openstack network create private"
+               " --share"
+               " --provider-network-type vxlan")
+
     cmd.append("openstack subnet create private-subnet"
                " --network private"
-               # " --no-dhcp"
-               " --subnet-range 192.168.0.0/24"
-               " --gateway 192.168.0.6"
+               " --dhcp"
+               " --subnet-range 10.0.0.0/24"
+               " --gateway 10.0.0.1"
                " --dns-nameserver 84.200.69.80"
-               " --allocation-pool start=192.168.0.100,end=192.168.0.240"
                " --ip-version 4")
 
     # create a router between this two networks
-    # cmd.append('openstack router create router')
-    # cmd.append('openstack router set router --external-gateway public')
-    # cmd.append('openstack router add subnet router private-subnet')
+    cmd.append('openstack router create router')
+    cmd.append('openstack router set router --external-gateway public')
+    cmd.append('openstack router add subnet router private-subnet')
 
     cmd.append("sleep 10")
 

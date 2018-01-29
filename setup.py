@@ -39,6 +39,7 @@ setup(
         'python-openstackclient>=3.0.0,<=4.0.0',
         'python-neutronclient==6.3.0',
         'python-vagrant>=0.5.14,<0.6.0',
+        'python-heatclient',
         # 'python-blazarclient==0.2.0',
         # ReadTheDocs
         'GitPython>=2.1.5'

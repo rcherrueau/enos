@@ -232,23 +232,20 @@ def init_os(env=None, **kwargs):
     cmd = []
     cmd.append('. %s' % os.path.join(env['resultdir'], 'admin-openrc'))
 
-    images = [ { 'name': 'cirros', 
-                 'url': 'http://download.cirros-cloud.net/0.3.5/cirros-0.3.5-x86_64-disk.img' },
-               { 'name': 'debian-9',
+    images = [ { 'name': 'debian-9',
                  'url': 'https://cdimage.debian.org/cdimage/openstack/current-9/debian-9-openstack-amd64.qcow2' } ]
-    cmd.append("cp ~/cirros-0.3.5-x86_64-disk.img /tmp/cirros.qcow2")
-    cmd.append("cp ~/debian-9-openstack-amd64.qcow2 /tmp/debian-9.qcow2")
     for image in images:
-	# cmd.append("wget -q -O /tmp/%s.qcow2 %s" % (image['name'], image['url']))
+	cmd.append("ls -l|fgrep %(name)s || "
+                   "wget -q -O /home/debian/%(name)s.qcow2 %(url)s" % image)
         cmd.append("openstack image list "
-                   "--property name=%(image_name)s -c Name -f value |fgrep %(image_name)s"
+                   "--property name=%(name)s -c Name -f value |fgrep %(name)s"
                    "|| openstack image create"
                    " --disk-format=qcow2"
                    " --container-format=bare"
                    " --property architecture=x86_64"
                    " --public"
-                   " --file /tmp/%(image_name)s.qcow2"
-                   " %(image_name)s" % {'image_name': image['name'] })
+                   " --file /home/debian/%(name)s.qcow2"
+                   " %(name)s" % image)
 
     # flavors name, ram, disk, vcpus
     flavors = [('m1.tiny', 512, 1, 1),

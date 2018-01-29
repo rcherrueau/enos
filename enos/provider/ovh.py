@@ -31,7 +31,7 @@ class Ovh(Provider):
         compute_ip = config['resources']['compute']
 
         # Make a fake interface for public net. See veth0 and veth1
-        # as two interfaces linked. To delete theme: 
+        # as two interfaces linked. To delete theme:
         # sudo ip link delete veth0 type veth peer name veth1
         ssh_cmd = 'ip link show veth0 || sudo ip link add veth0 type veth peer name veth1'
         for host in [ control_compute_ip, compute_ip ]:
@@ -46,12 +46,19 @@ class Ovh(Provider):
             else:
                 logging.info(res)
 
-        # TODO: DNAT for horizon
-        control_private_ip = net.ifaddresses('ens4')[net.AF_INET][0]['addr']
-        # dnat_cmd = "sudo iptables -t nat -A PREROUTING --dst %s ",
-        #            "-p tcp --dport 80 -j DNAT --to-destination %s"
-        #            % (
-        # subprocess.Popen(
+        # DNAT for horizon
+        # control_private_ip = net.ifaddresses('ens4')[net.AF_INET][0]['addr']
+        control_compute_private_ip = '192.168.0.249'
+        dnat_cmd = "sudo iptables -t nat -A PREROUTING --dst %s ",
+                   "-p tcp --dport 80 -j DNAT --to-destination %s"
+                   % (control_compute_ip, control_compute_private_ip)
+        subprocess.Popen(cmd, shell=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+        res = ssh.stdout.readlines()
+        if not res:
+            logging.error(ssh.stderr.readlines())
+        else:
+            logging.info(res)
 
 
         # Fallback to static configuration

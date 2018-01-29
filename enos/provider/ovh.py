@@ -10,6 +10,18 @@ import netifaces as net
 
 class Ovh(Provider):
     def init(self, config, force=False):
+        def _cmd(cmd):
+            c = subprocess.Popen(cmd,
+                                 shell=False,
+                                 stdout=subprocess.PIPE,
+                                 stderr=subprocess.PIPE)
+
+            res = c.stdout.readlines()
+            if not res:
+                logging.error(c.stderr.readlines())
+            else:
+                logging.info(res)
+
         def _make_hosts(resource):
             """Builds Host objects for `resource`.
 
@@ -33,18 +45,9 @@ class Ovh(Provider):
         # Make a fake interface for public net. See veth0 and veth1
         # as two interfaces linked. To delete theme:
         # sudo ip link delete veth0 type veth peer name veth1
-        ssh_cmd = 'ip link show veth0 || sudo ip link add veth0 type veth peer name veth1'
+        drop_ovh_dhcp = 'sudo iptables -I FORWARD 1 -s 192.168.0.3 -p udp --dport 68 -j DROP'
         for host in [ control_compute_ip, compute_ip ]:
-            ssh = subprocess.Popen(["ssh", "%s" % host, ssh_cmd],
-                                   shell=False,
-                                   stdout=subprocess.PIPE,
-                                   stderr=subprocess.PIPE)
-
-            res = ssh.stdout.readlines()
-            if not res:
-                logging.error(ssh.stderr.readlines())
-            else:
-                logging.info(res)
+            _cmd(["ssh", "%s" % host, drop_ovh_dhcp])
 
         # DNAT for horizon
         # control_private_ip = net.ifaddresses('ens4')[net.AF_INET][0]['addr']
@@ -52,14 +55,7 @@ class Ovh(Provider):
         dnat_cmd = "sudo iptables -t nat -A PREROUTING --dst %s ",
                    "-p tcp --dport 80 -j DNAT --to-destination %s"
                    % (control_compute_ip, control_compute_private_ip)
-        subprocess.Popen(cmd, shell=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-
-        res = ssh.stdout.readlines()
-        if not res:
-            logging.error(ssh.stderr.readlines())
-        else:
-            logging.info(res)
-
+        _cmd([dnat_cmd])
 
         # Fallback to static configuration
         config['resources'] = {

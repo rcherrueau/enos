@@ -294,6 +294,7 @@ def init_os(env=None, **kwargs):
 
     cmd.append("openstack subnet create public-subnet"
                " --network public"
+               " --subnet-range 192.168.0.0/24"
                " --no-dhcp"
                " --allocation-pool start=192.168.0.100,end=192.168.0.240"
                " --gateway %s"

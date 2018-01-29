@@ -6,6 +6,7 @@ import logging
 
 import subprocess
 import sys
+import netifaces as net
 
 class Ovh(Provider):
     def init(self, config, force=False):
@@ -25,20 +26,16 @@ class Ovh(Provider):
                              port=resource.get('port', None),
                              extra=resource.get('extra', {}))]
 
+        # Get IP of control_compute and compute node
         control_compute_ip = config['resources']['control_compute']
         compute_ip = config['resources']['compute']
 
-
-        # TODO: Make a fake interface for public net. See veth0 and veth1 as two interfaces linked
-        # 
-        # To delete theme: 
+        # Make a fake interface for public net. See veth0 and veth1
+        # as two interfaces linked. To delete theme: 
         # sudo ip link delete veth0 type veth peer name veth1
-        # reduce(list.__add__,
-        #        map(lambda _, vs: _make_hosts(vs),
-        #            config['resources'].items()))
-        cmd = 'ip link show veth0 || sudo ip link add veth0 type veth peer name veth1'
+        ssh_cmd = 'ip link show veth0 || sudo ip link add veth0 type veth peer name veth1'
         for host in [ control_compute_ip, compute_ip ]:
-            ssh = subprocess.Popen(["ssh", "%s" % host, cmd],
+            ssh = subprocess.Popen(["ssh", "%s" % host, ssh_cmd],
                                    shell=False,
                                    stdout=subprocess.PIPE,
                                    stderr=subprocess.PIPE)
@@ -48,6 +45,13 @@ class Ovh(Provider):
                 logging.error(ssh.stderr.readlines())
             else:
                 logging.info(res)
+
+        # TODO: DNAT for horizon
+        control_private_ip = net.ifaddresses('ens4')[net.AF_INET][0]['addr']
+        # dnat_cmd = "sudo iptables -t nat -A PREROUTING --dst %s ",
+        #            "-p tcp --dport 80 -j DNAT --to-destination %s"
+        #            % (
+        # subprocess.Popen(
 
 
         # Fallback to static configuration
@@ -92,7 +96,7 @@ class Ovh(Provider):
 
     def default_config(self):
         return {
-            'eths': [ 'ens4', 'veth0' ]
+            'eths': [ 'ens4', 'ens4' ]
         }
 
     def topology_to_resources(self, topology):

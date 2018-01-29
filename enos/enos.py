@@ -236,8 +236,10 @@ def init_os(env=None, **kwargs):
                  'url': 'http://download.cirros-cloud.net/0.3.5/cirros-0.3.5-x86_64-disk.img' },
                { 'name': 'debian-9',
                  'url': 'https://cdimage.debian.org/cdimage/openstack/current-9/debian-9-openstack-amd64.qcow2' } ]
+    cmd.append("cp ~/cirros-0.3.5-x86_64-disk.img /tmp/cirros.qcow2")
+    cmd.append("cp ~/debian-9-openstack-amd64.qcow2 /tmp/debian-9.qcow2")
     for image in images:
-	cmd.append("wget -q -o /tmp/%s.qcow2 %s" % (image['name'], image['url']))
+	# cmd.append("wget -q -O /tmp/%s.qcow2 %s" % (image['name'], image['url']))
         cmd.append("openstack image list "
                    "--property name=%(image_name)s -c Name -f value |fgrep %(image_name)s"
                    "|| openstack image create"
@@ -280,37 +282,40 @@ def init_os(env=None, **kwargs):
         cmd.append('openstack quota set --%s -1 admin' % quota)
 
     # default network (one public/one private)
-    cmd.append("openstack network create public"
-               " --share"
-               " --provider-physical-network physnet1"
-               " --provider-network-type flat"
-               " --external")
+    # cmd.append("openstack network create public"
+    #            " --share"
+    #            " --provider-physical-network physnet1"
+    #            " --provider-network-type flat"
+    #            " --external")
 
     cmd.append("openstack network create private"
                " --share"
-               " --provider-network-type vxlan")
+               " --provider-physical-network physnet1"
+               " --provider-network-type flat")
 
     # NOTE(ty-polytech): The 192.168.0.0/18 collides with the
     # 192.168.143.0/24 of public IP provided by Vagrant.
     cmd.append("openstack subnet create private-subnet"
                " --network private"
-               " --subnet-range 10.0.0.0/24"
-               " --gateway 10.0.0.1"
+               # " --no-dhcp"
+               " --subnet-range 192.168.0.0/24"
+               " --gateway 192.168.0.6"
                " --dns-nameserver 84.200.69.80"
+               " --allocation-pool start=192.168.0.100,end=192.168.0.240"
                " --ip-version 4")
 
     # create a router between this two networks
-    cmd.append('openstack router create router')
+    # cmd.append('openstack router create router')
     # cmd.append('openstack router set router --external-gateway public')
-    cmd.append('openstack router add subnet router private-subnet')
+    # cmd.append('openstack router add subnet router private-subnet')
 
     cmd.append("sleep 10")
 
     # NOTE(tp-polytech): From the frontend, access OpenStack VMs on their private
     # network 10.0.0.0/24 via the router
-    cmd.append('sudo ip route add 10.0.0.0/24 via '
-               '$(openstack router show router -c external_gateway_info -f value'
-               '  | jq -r ".external_fixed_ips[0] | .ip_address")')
+    # cmd.append('sudo ip route add 10.0.0.0/24 via '
+    #            '$(openstack router show router -c external_gateway_info -f value'
+    #            '  | jq -r ".external_fixed_ips[0] | .ip_address")')
 
 
     # NOTE(tp-polytech): Make OpenStack VMs ping the outside world.
@@ -341,7 +346,7 @@ def init_os(env=None, **kwargs):
     # change the replied packet's destination IP (10.0.2.*) to the
     # original source IP (192.168.143.*). This process is called a
     # SNAT and we can implement it with `iptables`.
-    cmd.append('sudo iptables -t nat -A POSTROUTING -o ens3 -j MASQUERADE')
+    # cmd.append('sudo iptables -t nat -A POSTROUTING -o ens3 -j MASQUERADE')
 
     cmd = '\n'.join(cmd)
 

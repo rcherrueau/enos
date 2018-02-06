@@ -12,7 +12,7 @@ class Ovh(Provider):
     def init(self, config, force=False):
         def _cmd(cmd):
             logging.info(cmd)
-            subprocess.check_call(cmd)
+            subprocess.check_call(cmd, shell=True)
 
         def _find_nic_of(ip):
             nic = 'lo'
@@ -41,8 +41,8 @@ class Ovh(Provider):
                              extra=resource.get('extra', {}))]
 
         # Get IP of control_compute and compute node
-        control_compute_ip = config['resources']['os_control_compute']
-        compute_ip = config['resources']['os_compute']
+        control_compute_ip = config['resources']['os-control-compute']
+        compute_ip = config['resources']['os-compute']
 
         # DNAT for horizon
         control_compute_ip_public = net.ifaddresses('ens3')[net.AF_INET][0]['addr']
@@ -52,7 +52,7 @@ class Ovh(Provider):
         _cmd(dnat_cmd)
 
         # SNAT for vrack VM internet traffic 
-        snat_cmd = "sudo iptables -t nat -A POSTROUTING -o ens3 -j MASQUERAD"
+        snat_cmd = "sudo iptables -t nat -A POSTROUTING -o ens3 -j MASQUERADE"
         _cmd(snat_cmd)
 
         # Fallback to static configuration

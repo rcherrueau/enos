@@ -240,8 +240,8 @@ def init_os(env=None, **kwargs):
     for image in images:
 	cmd.append("openstack image show %(name)s || "
                    "wget -q -O /home/debian/%(name)s.qcow2 %(url)s" % image)
-        cmd.append("openstack image show=%(name)s"
-                   "|| openstack image create"
+        cmd.append("openstack image show %(name)s || "
+                   "openstack image create"
                    " --disk-format=qcow2"
                    " --container-format=bare"
                    " --property architecture=x86_64"

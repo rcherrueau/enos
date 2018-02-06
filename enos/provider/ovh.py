@@ -11,16 +11,18 @@ import netifaces as net
 class Ovh(Provider):
     def init(self, config, force=False):
         def _cmd(cmd):
-            c = subprocess.Popen(cmd,
-                                 shell=True,
-                                 stdout=subprocess.PIPE,
-                                 stderr=subprocess.PIPE)
+            logging.info(cmd)
+            subprocess.check_call(cmd)
 
-            res = c.stdout.readlines()
-            if not res:
-                logging.error(c.stderr.readlines())
-            else:
-                logging.info(res)
+        def _find_nic_of(ip):
+            nic = 'lo'
+
+            for nic in net.interfaces():
+                for inet in net.ifaddresses(nic)[net.AF_INET]:
+                    if inet['addr'] == ip:
+                        return nic
+
+            return nic
 
         def _make_hosts(resource):
             """Builds Host objects for `resource`.
@@ -39,21 +41,19 @@ class Ovh(Provider):
                              extra=resource.get('extra', {}))]
 
         # Get IP of control_compute and compute node
-        control_compute_ip = config['resources']['control_compute']
-        compute_ip = config['resources']['compute']
-
-        # Make a fake interface for public net. See veth0 and veth1
-        # as two interfaces linked. To delete theme:
-        # sudo ip link delete veth0 type veth peer name veth1
-#        drop_ovh_dhcp = 'sudo iptables -I FORWARD 1 -s 192.168.0.3 -p udp --dport 68 -j DROP'
-#        for host in [ control_compute_ip, compute_ip ]:
-#            _cmd(["ssh", "%s" % host, drop_ovh_dhcp])
+        control_compute_ip = config['resources']['os_control_compute']
+        compute_ip = config['resources']['os_compute']
 
         # DNAT for horizon
-        # control_private_ip = net.ifaddresses('ens4')[net.AF_INET][0]['addr']
-        control_compute_private_ip = '192.168.0.249'
-        dnat_cmd = "sudo iptables -t nat -A PREROUTING --dst %s -p tcp --dport 80 -j DNAT --to-destination %s" % (control_compute_ip, control_compute_private_ip)
-        _cmd([dnat_cmd])
+        control_compute_ip_public = net.ifaddresses('ens3')[net.AF_INET][0]['addr']
+        dnat_cmd = "sudo iptables -t nat -A PREROUTING --dst %s -p tcp --dport 80 -j DNAT --to-destination %s" % (
+                control_compute_ip_public, 
+                control_compute_ip)
+        _cmd(dnat_cmd)
+
+        # SNAT for vrack VM internet traffic 
+        snat_cmd = "sudo iptables -t nat -A POSTROUTING -o ens3 -j MASQUERAD"
+        _cmd(snat_cmd)
 
         # Fallback to static configuration
         config['resources'] = {
@@ -70,12 +70,12 @@ class Ovh(Provider):
                 'extra': {'ansible_become': True}
             },
             'compute': [
-                {
-                    'address': control_compute_ip,
-                    'alias': 'control_compute',
-                    'user': 'debian',
-                    'extra': {'ansible_become': True}
-                },
+                # {
+                #     'address': control_compute_ip,
+                #     'alias': 'control_compute',
+                #     'user': 'debian',
+                #     'extra': {'ansible_become': True}
+                # },
                 {
                     'address': compute_ip,
                     'alias': 'compute',
@@ -85,7 +85,8 @@ class Ovh(Provider):
             ]
         }
 
-        eths = config['provider']['eths']
+        vrack_nic = _find_nic_of(control_compute_ip)
+        eths = [vrack_nic, vrack_nic]
         roles = {r: _make_hosts(vs) for (r, vs) in config['resources'].items()}
 
         return (roles, eths)

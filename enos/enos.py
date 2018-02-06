@@ -234,12 +234,13 @@ def init_os(env=None, **kwargs):
     cmd.append('. %s' % os.path.join(env['resultdir'], 'admin-openrc'))
 
     images = [ { 'name': 'debian-9',
-                 'url': 'https://cdimage.debian.org/cdimage/openstack/current-9/debian-9-openstack-amd64.qcow2' } ]
+                 'url': 'https://cdimage.debian.org/cdimage/openstack/current-9/debian-9-openstack-amd64.qcow2' },
+               { 'name': 'cirros',
+                 'url': 'http://download.cirros-cloud.net/0.3.4/cirros-0.3.4-x86_64-disk.img' } ]
     for image in images:
-	cmd.append("ls -l|fgrep %(name)s || "
+	cmd.append("openstack image show %(name)s || "
                    "wget -q -O /home/debian/%(name)s.qcow2 %(url)s" % image)
-        cmd.append("openstack image list "
-                   "--property name=%(name)s -c Name -f value |fgrep %(name)s"
+        cmd.append("openstack image show=%(name)s"
                    "|| openstack image create"
                    " --disk-format=qcow2"
                    " --container-format=bare"
@@ -255,12 +256,13 @@ def init_os(env=None, **kwargs):
                ('m1.large', 8192, 20, 4),
                ('m1.xlarge', 16384, 30, 8)]
     for flavor in flavors:
-        cmd.append("openstack flavor create %s"
+        cmd.append("openstack flavor show %s || "
+                   "openstack flavor create %s"
                    " --id auto"
                    " --ram %s"
                    " --disk %s"
                    " --vcpus %s"
-                   " --public" % (flavor[0], flavor[1], flavor[2], flavor[3]))
+                   " --public" % (flavor[0], flavor[0], flavor[1], flavor[2], flavor[3]))
 
     # security groups - allow everything
     protos = ['icmp', 'tcp', 'udp']
@@ -279,53 +281,24 @@ def init_os(env=None, **kwargs):
     for quota in quotas:
         cmd.append('openstack quota set --%s -1 admin' % quota)
 
-    # default network (one public/one private)
-    # cmd.append("openstack network create public"
-    #            " --share"
-    #            " --provider-physical-network physnet1"
-    #            " --provider-network-type flat"
-    #            " --external")
-
-    cmd.append("openstack network create public"
+    # Map project network on OVH vRack
+    cmd.append("openstack network show provider-net || "
+               "openstack network create"
                " --share"
-               " --external"
                " --provider-physical-network physnet1"
-               " --provider-network-type flat")
+               " --provider-network-type flat"
+               " provider-net")
 
-    cmd.append("openstack subnet create public-subnet"
-               " --network public"
+    cmd.append("openstack subnet show provider-net || "
+               "openstack subnet create"
+               " --network provider-net"
                " --subnet-range 192.168.0.0/24"
-               " --no-dhcp"
-               " --allocation-pool start=192.168.0.100,end=192.168.0.240"
-               " --gateway %s"
-               " --dns-nameserver 84.200.69.80"
-               " --ip-version 4" % net.ifaddresses('ens4')[net.AF_INET][0]['addr'])
-
-    cmd.append("openstack network create private"
-               " --share"
-               " --provider-network-type vxlan")
-
-    cmd.append("openstack subnet create private-subnet"
-               " --network private"
+               " --allocation-pool start=192.168.0.5,end=192.168.0.240"
                " --dhcp"
-               " --subnet-range 10.0.0.0/24"
-               " --gateway 10.0.0.1"
+               " --gateway 192.168.0.2"
                " --dns-nameserver 84.200.69.80"
-               " --ip-version 4")
-
-    # create a router between this two networks
-    cmd.append('openstack router create router')
-    cmd.append('openstack router set router --external-gateway public')
-    cmd.append('openstack router add subnet router private-subnet')
-
-    cmd.append("sleep 10")
-
-    # NOTE(tp-polytech): From the frontend, access OpenStack VMs on their private
-    # network 10.0.0.0/24 via the router
-    # cmd.append('sudo ip route add 10.0.0.0/24 via '
-    #            '$(openstack router show router -c external_gateway_info -f value'
-    #            '  | jq -r ".external_fixed_ips[0] | .ip_address")')
-
+               " --ip-version 4"
+               " provider-net")
 
     # NOTE(tp-polytech): Make OpenStack VMs ping the outside world.
     # When you perform a VirtualBox deployment with Vagrant, then

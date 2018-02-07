@@ -238,7 +238,7 @@ def init_os(env=None, **kwargs):
                { 'name': 'cirros',
                  'url': 'http://download.cirros-cloud.net/0.3.4/cirros-0.3.4-x86_64-disk.img' } ]
     for image in images:
-	cmd.append("openstack image show %(name)s || "
+	cmd.append("ls -l %(name)s.qcow2 || "
                    "wget -q -O /home/debian/%(name)s.qcow2 %(url)s" % image)
         cmd.append("openstack image show %(name)s || "
                    "openstack image create"
@@ -264,23 +264,6 @@ def init_os(env=None, **kwargs):
                    " --vcpus %s"
                    " --public" % (flavor[0], flavor[0], flavor[1], flavor[2], flavor[3]))
 
-    # security groups - allow everything
-    protos = ['icmp', 'tcp', 'udp']
-    for proto in protos:
-        cmd.append("openstack security group rule create default"
-                   " --protocol %s"
-                   " --dst-port 1:65535"
-                   " --src-ip 0.0.0.0/0" % proto)
-
-    # quotas - set some unlimited for admin project
-    quotas = ['cores', 'ram', 'instances']
-    for quota in quotas:
-        cmd.append('nova quota-class-update --%s -1 default' % quota)
-
-    quotas = ['fixed-ips', 'floating-ips']
-    for quota in quotas:
-        cmd.append('openstack quota set --%s -1 admin' % quota)
-
     # Map project network on OVH vRack
     cmd.append("openstack network show provider-net || "
                "openstack network create"
@@ -299,6 +282,24 @@ def init_os(env=None, **kwargs):
                " --dns-nameserver 84.200.69.80"
                " --ip-version 4"
                " provider-net")
+
+    # security groups - allow everything
+    protos = ['icmp', 'tcp', 'udp']
+    for proto in protos:
+        cmd.append("openstack security group rule list --protocol %s default | fgrep %s || "
+                   "openstack security group rule create default"
+                   " --protocol %s"
+                   " --dst-port 1:65535"
+                   " --src-ip 0.0.0.0/0" % (proto, proto, proto))
+
+    # quotas - set some unlimited for admin project
+    quotas = ['cores', 'ram', 'instances', 'fixed-ips', 'floating-ips' ]
+    for quota in quotas:
+        cmd.append('openstack quota set --%s -1 admin' % quota)
+
+    # quotas = ['fixed-ips', 'floating-ips']
+    # for quota in quotas:
+    #     cmd.append('openstack quota set --%s -1 admin' % quota)
 
     # NOTE(tp-polytech): Make OpenStack VMs ping the outside world.
     # When you perform a VirtualBox deployment with Vagrant, then

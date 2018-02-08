@@ -251,8 +251,8 @@ def init_os(env=None, **kwargs):
 
     # flavors name, ram, disk, vcpus
     flavors = [('m1.tiny', 512, 1, 1),
-               ('m1.small', 512, 5, 1),
-               ('m1.medium', 4096, 10, 2),
+               ('m1.small', 1024, 5, 1),
+               ('m1.medium', 2048, 10, 1),
                ('m1.large', 8192, 20, 4),
                ('m1.xlarge', 16384, 30, 8)]
     for flavor in flavors:

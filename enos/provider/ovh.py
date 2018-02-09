@@ -24,6 +24,17 @@ class Ovh(Provider):
 
             return nic
 
+        def _find_ip_of(nic):
+            ip = '127.0.0.1'
+
+            try:
+                ip = net.ifaddresses(nic)[net.AF_INET][0]['addr']
+            except:
+                pass
+
+            return ip
+                
+
         def _make_hosts(resource):
             """Builds Host objects for `resource`.
 
@@ -40,15 +51,17 @@ class Ovh(Provider):
                              port=resource.get('port', None),
                              extra=resource.get('extra', {}))]
 
-        # Get IP of control_compute and compute node
-        control_compute_ip = config['resources']['os-control-compute']
-        compute_ip = config['resources']['os-compute']
+        print(config)
+        # Get IP of control and computes nodes
+        control_ip = config['resources'].get('os-control', '192.168.0.2')
+        compute1_ip = config['resources'].get('os-compute1', '192.168.0.3')
+        compute2_ip = config['resources'].get('os-compute2', '192.168.0.4')
 
         # DNAT for horizon
-        control_compute_ip_public = net.ifaddresses('ens3')[net.AF_INET][0]['addr']
+        control_ip_public = _find_ip_of('ens3')
         dnat_cmd = "sudo iptables -t nat -A PREROUTING --dst %s -p tcp --dport 80 -j DNAT --to-destination %s" % (
-                control_compute_ip_public, 
-                control_compute_ip)
+                control_ip_public, 
+                control_ip)
         _cmd(dnat_cmd)
 
         # SNAT for vrack VM internet traffic 
@@ -58,34 +71,34 @@ class Ovh(Provider):
         # Fallback to static configuration
         config['resources'] = {
             'control': {
-                'address': control_compute_ip,
-                'alias': 'control_compute',
+                'address': control_ip,
+                'alias': 'os-control',
                 'user': 'debian',
                 'extra': {'ansible_become': True}
             },
             'network': {
-                'address': control_compute_ip,
-                'alias': 'control_compute',
+                'address': control_ip,
+                'alias': 'os-control',
                 'user': 'debian',
                 'extra': {'ansible_become': True}
             },
             'compute': [
-                # {
-                #     'address': '192.168.0.4',
-                #     'alias': 'compute2',
-                #     'user': 'debian',
-                #     'extra': {'ansible_become': True}
-                # },
                 {
-                    'address': compute_ip,
-                    'alias': 'compute1',
+                    'address': compute1_ip,
+                    'alias': 'os-compute1',
+                    'user': 'debian',
+                    'extra': {'ansible_become': True}
+                },
+                {
+                    'address': compute2_ip,
+                    'alias': 'os-compute2',
                     'user': 'debian',
                     'extra': {'ansible_become': True}
                 }
             ]
         }
 
-        vrack_nic = _find_nic_of(control_compute_ip)
+        vrack_nic = _find_nic_of(control_ip)
         eths = [vrack_nic, vrack_nic]
         roles = {r: _make_hosts(vs) for (r, vs) in config['resources'].items()}
 

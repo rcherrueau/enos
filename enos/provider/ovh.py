@@ -71,14 +71,14 @@ class Ovh(Provider):
             },
             'compute': [
                 # {
-                #     'address': control_compute_ip,
-                #     'alias': 'control_compute',
+                #     'address': '192.168.0.4',
+                #     'alias': 'compute2',
                 #     'user': 'debian',
                 #     'extra': {'ansible_become': True}
                 # },
                 {
                     'address': compute_ip,
-                    'alias': 'compute',
+                    'alias': 'compute1',
                     'user': 'debian',
                     'extra': {'ansible_become': True}
                 }
@@ -98,7 +98,6 @@ class Ovh(Provider):
 
     def default_config(self):
         return {
-            'eths': [ 'ens4', 'ens4' ]
         }
 
     def topology_to_resources(self, topology):
